@@ -13,7 +13,7 @@ find_package(CUDA REQUIRED)
 
 include_directories(${Boost_INCLUDE_DIRS})
 
-add_executable(BerlinTest main.cpp)
+add_executable(BerlinTest main.cpp src/logger.cpp src/TRTInference.cpp)
 
 target_include_directories(BerlinTest PUBLIC ${OpenCV_INCLUDE_DIRS} ${CUDA_INCLUDE_DIRS} ${TensorRT_DIR})
 target_link_libraries(BerlinTest ${OpenCV_LIBS} ${CUDA_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${TensorRT_LIBRARIES})
