@@ -42,50 +42,39 @@ nvinfer1::ICudaEngine* TRTInference::loadEngine(std::string &engine_path) {
 }
 
 std::vector<std::pair<std::string, float>> TRTInference::run(cv::Mat &input) {
-    std::vector<nvinfer1::Dims> input_dims;
     std::vector<nvinfer1::Dims> output_dims;
     std::vector<void*> buffers(_engine->getNbBindings());
     for (int i = 0; i < _engine->getNbBindings(); ++i) {
         auto binding_size = getSizeByDim(_engine->getBindingDimensions(i)) * 1 * sizeof(float);
         cudaMalloc(&buffers[i], binding_size);
-        if (_engine->bindingIsInput(i)) {
-            input_dims.emplace_back(_engine->getBindingDimensions(i));
-        } else {
+        if (!_engine->bindingIsInput(i)) {
             output_dims.emplace_back(_engine->getBindingDimensions(i));
         }
     }
-    preprocessImage(input, (float*)buffers[0], input_dims[0]);
-    _context->enqueueV2(buffers.data(), nullptr, nullptr);
-    std::vector<std::pair<std::string, float>> results = postprocessResults((float*) buffers[1], output_dims[0]);
+    preprocessImage(input, (float*)buffers[0]);
+    _context->enqueueV2(buffers.data(), 0, nullptr);
+    std::vector<std::pair<std::string, float>> results = postprocessResults((float*)buffers[1], output_dims[0]);
     for (void* buf : buffers) {
         cudaFree(buf);
     }
     return results;
 }
 
-void TRTInference::preprocessImage(cv::Mat &image, float* gpu_input, const nvinfer1::Dims& dims) {
-    auto input_width = dims.d[2];
-    auto input_height = dims.d[1];
-    auto channels = dims.d[0];
-    auto input_size = cv::Size(input_width, input_height);
+void TRTInference::preprocessImage(cv::Mat &image, float* gpu_input) {
+    cv::Size input_size = cv::Size(_input_height, _input_width);
 
-    std::vector<float> divider = {0.229f, 0.224f, 0.225f};
-    cv::resize(image, image, input_size, 0, 0, cv::INTER_NEAREST);
-    image.convertTo(image, CV_32FC3, 1.f / 255.f);
-    cv::subtract(image, cv::Scalar(0.485f, 0.456f, 0.406f), image);
-    cv::multiply(image, cv::Scalar(1.f / 0.229f, 1.f / 0.224f, 1.f / 0.225f), image, 1, -1);
-    cv::transpose(image, image);
+    cv::cuda::GpuMat gpu_image;
+    gpu_image.upload(image);
 
-    cv::Mat img_chw;
-    cv::transpose(image, img_chw);
-
-    cv::cuda::GpuMat img_gpu;
-    img_gpu.upload(image);
-
+    cv::cuda::resize(gpu_image, gpu_image, input_size, 0, 0, cv::INTER_NEAREST);
+    gpu_image.convertTo(gpu_image, CV_32FC3, 1.f / 255.f);
+    cv::cuda::subtract(gpu_image, cv::Scalar(0.485f, 0.456f, 0.406f), gpu_image, cv::noArray(), -1);
+    cv::cuda::divide(gpu_image, cv::Scalar(0.229f, 0.224f, 0.225f), gpu_image, 1, -1);
     std::vector<cv::cuda::GpuMat> chw;
-    for (size_t i = 0; i < channels; ++i) {
-        chw.emplace_back(cv::cuda::GpuMat(input_size, CV_32FC1, gpu_input + i * input_width * input_height));
+    for (size_t i = 0; i < 3; ++i) {
+        chw.emplace_back(cv::cuda::GpuMat(input_size, CV_32FC1, gpu_input + i * _input_width * _input_height));
     }
+    cv::cuda::split(gpu_image, chw);
 }
 
 size_t TRTInference::getSizeByDim(const nvinfer1::Dims& dims) {
@@ -114,15 +103,11 @@ std::vector<std::pair<std::string, float>> TRTInference::postprocessResults(floa
 
     std::transform(cpu_output.begin(), cpu_output.end(), cpu_output.begin(), [](float val) {return std::exp(val);});
     auto sum = std::accumulate(cpu_output.begin(), cpu_output.end(), 0.0);
-    std::cout << sum << std::endl;
 
     std::vector<int> indices(getSizeByDim(dims) * 1);
     std::iota(indices.begin(), indices.end(), 0);
     std::sort(indices.begin(), indices.end(), [&cpu_output](int i1, int i2) {return cpu_output[i1] > cpu_output[i2];});
     std::vector<std::pair<std::string, float>> output;
-    if (cpu_output[indices[0]] / sum > 0.005) {
-        std::string class_name = classes.size() > indices[0] ? classes[indices[0]] : "unknown";
-        output.emplace_back(std::make_pair(class_name,  cpu_output[indices[0]] / sum));
-    }
+    output.emplace_back(std::make_pair(classes[indices[0]], cpu_output[indices[0]] / sum));
     return output;
 }
