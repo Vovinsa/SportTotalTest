@@ -3,8 +3,8 @@
 #include "iostream"
 #include "infer/TRTInference.h"
 
-TRTInference trt("./trt.engine",
-                 "./resnet34.onnx");
+TRTInference trt("/SportTotalTest/trt.engine",
+                 "/SportTotalTest/resnet34.onnx");
 std::string image_data;
 
 int postRequestCallback(void *cls, MHD_Connection *connection,
