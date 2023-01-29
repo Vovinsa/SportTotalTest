@@ -6,6 +6,7 @@ TRTInference::TRTInference(std::string engine_path, std::string onnx_model_path)
     }
     _engine = loadEngine(engine_path);
     _context = _engine->createExecutionContext();
+    _classes = getClassNames("./classes.txt");
 }
 
 void TRTInference::buildEngine(std::string &onnx_model_path, std::string &engine_path) {
@@ -96,8 +97,6 @@ std::vector<std::string> TRTInference::getClassNames(const std::string& imagenet
 }
 
 std::vector<std::pair<std::string, float>> TRTInference::postprocessResults(float *gpu_output, const nvinfer1::Dims &dims) {
-    auto classes = getClassNames("./classes.txt");
-
     std::vector<float> cpu_output(getSizeByDim(dims) * 1);
     cudaMemcpy(cpu_output.data(), gpu_output, cpu_output.size() * sizeof(float), cudaMemcpyDeviceToHost);
 
@@ -108,6 +107,6 @@ std::vector<std::pair<std::string, float>> TRTInference::postprocessResults(floa
     std::iota(indices.begin(), indices.end(), 0);
     std::sort(indices.begin(), indices.end(), [&cpu_output](int i1, int i2) {return cpu_output[i1] > cpu_output[i2];});
     std::vector<std::pair<std::string, float>> output;
-    output.emplace_back(std::make_pair(classes[indices[0]], cpu_output[indices[0]] / sum));
+    output.emplace_back(std::make_pair(_classes[indices[0]], cpu_output[indices[0]] / sum));
     return output;
 }

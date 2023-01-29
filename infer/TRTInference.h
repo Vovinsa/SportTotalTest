@@ -33,5 +33,5 @@ private:
     Logger _logger;
     int _input_height = 224;
     int _input_width = 224;
-    int _channels = 224;
+    std::vector<std::string> _classes;
 };
