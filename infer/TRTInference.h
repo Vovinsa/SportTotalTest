@@ -7,10 +7,7 @@
 #include "cuda_runtime_api.h"
 #include "NvInfer.h"
 #include "NvOnnxParser.h"
-#include "cuda_runtime_api.h"
 #include "opencv2/opencv.hpp"
-#include "opencv2/cudaarithm.hpp"
-#include "opencv2/cudawarping.hpp"
 #include "numeric"
 
 #include "logger.h"

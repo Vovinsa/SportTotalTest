@@ -6,7 +6,7 @@ TRTInference::TRTInference(std::string engine_path, std::string onnx_model_path)
     }
     _engine = loadEngine(engine_path);
     _context = _engine->createExecutionContext();
-    _classes = getClassNames("./classes.txt");
+    _classes = getClassNames("/SportTotalTest/classes.txt");
 }
 
 void TRTInference::buildEngine(std::string &onnx_model_path, std::string &engine_path) {
@@ -63,19 +63,12 @@ std::vector<std::pair<std::string, float>> TRTInference::run(cv::Mat &input) {
 
 void TRTInference::preprocessImage(cv::Mat &image, float* gpu_input) {
     cv::Size input_size = cv::Size(_input_height, _input_width);
-
-    cv::cuda::GpuMat gpu_image;
-    gpu_image.upload(image);
-
-    cv::cuda::resize(gpu_image, gpu_image, input_size, 0, 0, cv::INTER_NEAREST);
-    gpu_image.convertTo(gpu_image, CV_32FC3, 1.f / 255.f);
-    cv::cuda::subtract(gpu_image, cv::Scalar(0.485f, 0.456f, 0.406f), gpu_image, cv::noArray(), -1);
-    cv::cuda::divide(gpu_image, cv::Scalar(0.229f, 0.224f, 0.225f), gpu_image, 1, -1);
-    std::vector<cv::cuda::GpuMat> chw;
-    for (size_t i = 0; i < 3; ++i) {
-        chw.emplace_back(cv::cuda::GpuMat(input_size, CV_32FC1, gpu_input + i * _input_width * _input_height));
-    }
-    cv::cuda::split(gpu_image, chw);
+    cv::resize(image, image, input_size, 0, 0, cv::INTER_NEAREST);
+    image.convertTo(image, CV_32FC3, 1.f / 255.f);
+    cv::subtract(image, cv::Scalar(0.485f, 0.456f, 0.406f), image, cv::noArray(), -1);
+    cv::multiply(image, cv::Scalar(1.f / 0.229f, 1.f / 0.224f, 1.f / 0.225f), image, 1, -1);
+    cv::dnn::blobFromImage(image, image, 1.0, cv::Size(), cv::Scalar(), true, false);
+    cudaMemcpy(gpu_input, image.data, image.total() * sizeof(float), cudaMemcpyHostToDevice);
 }
 
 size_t TRTInference::getSizeByDim(const nvinfer1::Dims& dims) {
